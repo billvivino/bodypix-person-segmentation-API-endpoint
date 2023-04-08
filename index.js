@@ -7,25 +7,32 @@ const { loadGraphModel } = require('@tensorflow/tfjs-converter');
 const bodyPix = require('@tensorflow-models/body-pix');
 const Jimp = require('jimp');
 const multer = require('multer');
+const cors = require('cors');
 const app = express();
 const port = 3000;
-
+var img;
 const upload = multer({ 
   dest: 'input/'
 });
 
-app.use(express.json());
+// app.use(express.json());
+// enable CORS
+app.use(cors());
+
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  next();
+});
 
 app.post('/process-image', upload.single('Image'), async (req, res) => {
   try {
-    const { filename } = req.file;
-    
     //get the uploaded image file
     const imageFile = req.file;;
     if (!imageFile) {
       res.status(400).send('No image file uploaded');
       return;
     }
+    const { filename } = req.file;
 
     var srcimagefile = `input/${filename}`;
     var srcimg = fs.readFileSync(srcimagefile);
@@ -44,7 +51,7 @@ app.post('/process-image', upload.single('Image'), async (req, res) => {
 
   function convImg(data){
     imgD = createImageData(new Uint8ClampedArray(data.data), data.width, data.height);
-    const img = new Image();
+    img = new Image();
     img.src = srcimagefile;
     const canvas = createCanvas(data.width,data.height);
     const ctx = canvas.getContext('2d');
@@ -69,11 +76,11 @@ app.post('/process-image', upload.single('Image'), async (req, res) => {
     console.log("saving segmentation");
     // by setting maskBackground to false, the maskImage that is generated will be opaque where there is a person and transparent where there is a background.
     
-    const sizeOf = require('image-size');
+    // const sizeOf = require('image-size');
     // load the image to get its size
-    const dimensions = sizeOf('image.jpg');
-    const imageWidth = dimensions.width;
-    const imageHeight = dimensions.height;
+    // const dimensions = sizeOf('image.jpg');
+    const imageWidth =  img.width;
+    const imageHeight =  img.height;
 
     // create a new canvas with the same dimensions as the image
     const canvas = createCanvas(imageWidth, imageHeight);
@@ -81,7 +88,7 @@ app.post('/process-image', upload.single('Image'), async (req, res) => {
 
     // load the image into the canvas
     const image = await loadImage('image.jpg');
-    context.drawImage(image, 0, 0);
+    context.drawImage(img, 0, 0);
 
     // get the pixel data of the canvas
     const imageData = context.getImageData(0, 0, imageWidth, imageHeight);
@@ -106,26 +113,49 @@ app.post('/process-image', upload.single('Image'), async (req, res) => {
 
     // rotate the output image using Jimp
     Jimp.read(outputBuffer, (err, image) => {
-      if (err) throw err;
-      image.rotate(270).write('output.jpg');
+      if (err) {
+        res.status(500).send({ message: 'Internal Server Error' });
+      } else {
+        // image.rotate(270).write('output.jpg');
+        image.write('output.png');
+        // Save the image as a buffer
+        image.getBuffer(Jimp.MIME_PNG, (err, buffer) => {
+          if (err) {
+            console.log(err);
+            res.status(500).send({ message: 'Internal Server Error' });
+          } else {
+            // Send the buffer as a response
+            res.set('Content-Type', 'image/png');
+            res.set('Content-Disposition', 'attachment; filename=output.png');
+            res.set('Content-Length', buffer.length);
+            res.end(buffer);
+          }
+        });
+      }
     });
-
+    console.log('The file has been saved!');
     // write the output buffer to a file
-    fs.writeFile('output.jpg', outputBuffer, (err) => {
-      if (err) throw err;
-      console.log('The file has been saved!');
-    });
+    // fs.writeFile('output.jpg', outputBuffer, (err) => {
+    //   if (err) throw err;
+      
+    // });
     
     // Convert the object to a JSON string
     const jsonString = JSON.stringify(segmentation.data);
 
     // Write the JSON string to a file
     fs.writeFileSync('segmentationData.json', jsonString);
-    // Create a new image with the mask applied
-    // fs.writeFileSync('segmentation.png', maskImage.toBuffer('image/png'));
+      
+    // send the modified image as the response
+    // res.set('Content-Type', 'image/jpg');
+    // res.set('Content-Length', outputBuffer.length);
+    // res.send(outputBuffer);
     console.log("done");
   }
+});
 
+app.get('/', (req, res) => {
+  res.send('Hello World!');
 });
 
 app.listen(3000, () => {
