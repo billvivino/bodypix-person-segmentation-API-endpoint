@@ -43,8 +43,10 @@ app.post('/process-image', upload.single('Image'), async (req, res) => {
         var img = convImg(data); //this function is provided below
         //console.log(img);
         loadAndPredict(img).catch(e => {console.error(e)}) //this function is provided below
+        deleteFiles(res, filename); //this function is provided below
     });
   } catch (err) {
+    deleteFiles(res, filename);
     console.error(err);
   }
 
@@ -87,7 +89,7 @@ app.post('/process-image', upload.single('Image'), async (req, res) => {
     const context = canvas.getContext('2d');
 
     // load the image into the canvas
-    const image = await loadImage('image.jpg');
+    // const image = await loadImage('image.jpg');
     context.drawImage(img, 0, 0);
 
     // get the pixel data of the canvas
@@ -161,3 +163,15 @@ app.get('/', (req, res) => {
 app.listen(3000, () => {
   console.log('Server listening on port 3000');
 });
+
+function deleteFiles(res, filename) {
+  res.on('finish', () => {
+    // delete the files from the server after the video is sent 
+    fs.unlink(`input/${filename}`, (err) => {
+      if (err)
+        console.log(`Error deleting file: ${err}`);
+      else
+        console.log(`File deleted: input/${filename}`);
+    });
+  });
+}
